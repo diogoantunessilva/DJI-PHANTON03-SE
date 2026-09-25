@@ -15,6 +15,14 @@ Check(baselineChannels.Aileron == 1024 && baselineChannels.Elevator == 1024
     && baselineChannels.GyroValue == 1024, "UInt16 little-endian sem escala");
 Check(baselineChannels.WheelInfo == 0 && baselineChannels.Status1 == 0x20
     && baselineChannels.Status2 == 0x04 && baselineChannels.ModeBits == 2, "status bruto e modo");
+Check(RcChannelDisplay.Normalize(364) == -100 && RcChannelDisplay.Normalize(1024) == 0
+    && RcChannelDisplay.Normalize(1684) == 100, "normalização pelos extremos observados");
+Check(RcChannelDisplay.Normalize(0) == -100 && RcChannelDisplay.Normalize(ushort.MaxValue) == 100,
+    "normalização limitada a ±100%");
+var aileronDisplay = RcChannelDisplay.FormatChannel("AILERON", 1328);
+Check(aileronDisplay.Contains("Raw: 1328 | Normalized: +46.1%", StringComparison.Ordinal)
+    && aileronDisplay.EndsWith(new string('█', 14) + new string('░', 5), StringComparison.Ordinal),
+    "exibição RC com valor bruto, porcentagem e barra");
 
 var flagsFrameBytes = (byte[])sample.Clone();
 flagsFrameBytes[22] = 0x38;
@@ -76,7 +84,7 @@ try
     Check(new FileInfo(source.FramesCapturePath).Length == 2 * sample.Length, "arquivo de quadros binários");
     var csvRows = File.ReadAllLines(source.FramesCsvPath);
     Check(csvRows.Length == 3 && csvRows[1].EndsWith("true,true") && csvRows[2].EndsWith("true,false"), "CSV de quadros e CRC inválido");
-    var rcRows = File.ReadAllLines(source.RcChannelsCsvPath);
+    var rcRows = File.ReadAllLines(source.RcChannelsCsvPath!);
     Check(rcRows.Length == 2 && rcRows[0] == "timestamp,aileron,elevator,throttle,rudder,gyro,wheel,status1,status2"
         && rcRows[1].EndsWith(",1024,1024,1024,1024,1024,0,32,4"), "CSV de canais RC brutos");
     Check(File.ReadAllLines(source.CommandsSummaryPath).Single(line => line.StartsWith("0x0E,0x02,0x06,0x05,")).EndsWith(",2"), "resumo inicial");
@@ -86,7 +94,7 @@ try
         await sink.WriteFrameAsync(frame, DateTimeOffset.Now);
     }
     Check(File.ReadAllLines(source.CommandsSummaryPath).Single(line => line.StartsWith("0x0E,0x02,0x06,0x05,")).EndsWith(",3"), "resumo acumulado após reinício");
-    Check(File.ReadAllLines(source.RcChannelsCsvPath).Length == 3, "CSV RC acumulado após reinício");
+    Check(File.ReadAllLines(source.RcChannelsCsvPath!).Length == 3, "CSV RC acumulado após reinício");
 
     var aircraftSource = new TelemetrySource("aircraft_5678", "192.168.1.2", 5678, "Wi-Fi",
         Path.Combine(testDirectory, "aircraft_raw.bin"), Path.Combine(testDirectory, "aircraft_telemetry.log"),
@@ -119,7 +127,8 @@ try
     {
         await aircraftSink.WriteFrameAsync(frame, firstTimestamp.AddSeconds(6));
     }
-    Check(File.ReadAllLines(aircraftSource.CommandsSummaryPath)[1] == $"0x0E,0x02,0x06,0x05,4,12|13,0.5,{firstTimestamp:O},{firstTimestamp.AddSeconds(6):O}", "resumo da aeronave acumulado após reinício");
+    Check(File.ReadAllLines(aircraftSource.FramesCsvPath).Length == 5, "CSV da aeronave acrescentado após reinício");
+    Check(File.ReadAllLines(aircraftSource.CommandsSummaryPath)[1] == $"0x0E,0x02,0x06,0x05,1,13,0,{firstTimestamp.AddSeconds(6):O},{firstTimestamp.AddSeconds(6):O}", "resumo da aeronave reiniciado para nova captura");
 }
 finally
 {

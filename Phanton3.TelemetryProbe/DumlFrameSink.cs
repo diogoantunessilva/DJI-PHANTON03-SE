@@ -109,7 +109,11 @@ internal sealed class DumlFrameSink : IFrameSink
 
             if (_showFrames)
             {
-                Console.WriteLine($"{timestamp:O} | source={_source.Name} | len={frame.TotalLength} | src={Hex(frame.Sender)} | dst={Hex(frame.Receiver)} | seq={frame.Sequence} | flags={Hex(frame.Flags)} | cmdSet={Hex(frame.CommandSet)} | cmdId={Hex(frame.CommandId)} | payloadLen={frame.PayloadLength} | CRC8={Hex(frame.HeaderCrc8)} CRC8_OK={frame.Crc8Ok.ToString().ToLowerInvariant()} | CRC16=0x{frame.ReceivedCrc16:X4} CRC16_OK={frame.Crc16Ok.ToString().ToLowerInvariant()}{(semantic is null ? "" : " | " + semantic.DisplayText)}");
+                var header = $"{timestamp:O} | source={_source.Name} | len={frame.TotalLength} | src={Hex(frame.Sender)} | dst={Hex(frame.Receiver)} | seq={frame.Sequence} | flags={Hex(frame.Flags)} | cmdSet={Hex(frame.CommandSet)} | cmdId={Hex(frame.CommandId)} | payloadLen={frame.PayloadLength} | CRC8={Hex(frame.HeaderCrc8)} CRC8_OK={frame.Crc8Ok.ToString().ToLowerInvariant()} | CRC16=0x{frame.ReceivedCrc16:X4} CRC16_OK={frame.Crc16Ok.ToString().ToLowerInvariant()}";
+                var details = semantic?.Channels is { } displayChannels
+                    ? Environment.NewLine + RcChannelDisplay.Format(displayChannels)
+                    : semantic is not null ? " | " + semantic.DisplayText : "";
+                Console.WriteLine(header + details);
             }
 
             if (timestamp - _lastSummaryWrite >= SummaryInterval)

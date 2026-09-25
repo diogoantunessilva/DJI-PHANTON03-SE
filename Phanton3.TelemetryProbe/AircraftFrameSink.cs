@@ -22,7 +22,7 @@ internal sealed class AircraftFrameSink : IFrameSink
     {
         _source = source;
         _showFrames = showFrames;
-        _stats = LoadStats(source.FramesCsvPath);
+        _stats = new();
         var newCsv = !File.Exists(source.FramesCsvPath) || new FileInfo(source.FramesCsvPath).Length == 0;
 
         _frames = new FileStream(source.FramesCapturePath, FileMode.Append, FileAccess.Write,
@@ -154,48 +154,7 @@ internal sealed class AircraftFrameSink : IFrameSink
         }
     }
 
-    private static Dictionary<(byte Sender, byte Receiver, byte CommandSet, byte CommandId), CommandStats> LoadStats(string path)
-    {
-        var stats = new Dictionary<(byte, byte, byte, byte), CommandStats>();
-        if (!File.Exists(path))
-        {
-            return stats;
-        }
-
-        foreach (var line in File.ReadLines(path).Skip(1))
-        {
-            var columns = line.Split(',');
-            if (columns.Length != 13
-                || !DateTimeOffset.TryParse(columns[0], CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var timestamp)
-                || !TryParseHex(columns[3], out var sender)
-                || !TryParseHex(columns[4], out var receiver)
-                || !TryParseHex(columns[7], out var commandSet)
-                || !TryParseHex(columns[8], out var commandId)
-                || !int.TryParse(columns[9], NumberStyles.None, CultureInfo.InvariantCulture, out var payloadLength))
-            {
-                continue;
-            }
-
-            var key = (sender, receiver, commandSet, commandId);
-            if (!stats.TryGetValue(key, out var current))
-            {
-                current = new CommandStats();
-                stats.Add(key, current);
-            }
-            current.Add(timestamp, payloadLength);
-        }
-
-        return stats;
-    }
-
     private static string Hex(byte value) => $"0x{value:X2}";
-
-    private static bool TryParseHex(string value, out byte result)
-    {
-        result = 0;
-        return value.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
-            && byte.TryParse(value.AsSpan(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out result);
-    }
 
     private sealed class CommandStats
     {

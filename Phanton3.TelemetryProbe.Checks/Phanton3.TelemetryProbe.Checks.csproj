@@ -15,6 +15,7 @@
     <Compile Include="..\Phanton3.TelemetryProbe\AircraftFrameSink.cs" Link="AircraftFrameSink.cs" />
     <Compile Include="..\Phanton3.TelemetryProbe\IFrameSink.cs" Link="IFrameSink.cs" />
     <Compile Include="..\Phanton3.TelemetryProbe\DumlSemanticDecoder.cs" Link="DumlSemanticDecoder.cs" />
+    <Compile Include="..\Phanton3.TelemetryProbe\RcChannelDisplay.cs" Link="RcChannelDisplay.cs" />
     <Compile Include="..\Phanton3.TelemetryProbe\TelemetrySource.cs" Link="TelemetrySource.cs" />
   </ItemGroup>
 

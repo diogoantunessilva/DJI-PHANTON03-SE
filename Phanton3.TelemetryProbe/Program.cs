@@ -9,11 +9,23 @@ Console.CancelKeyPress += (_, eventArgs) =>
 };
 
 var workingDirectory = Directory.GetCurrentDirectory();
-var rcTestMode = args.Contains("--rc-test", StringComparer.OrdinalIgnoreCase);
+CaptureOptions options;
+try
+{
+    options = CaptureOptions.Parse(args);
+}
+catch (ArgumentException exception)
+{
+    Console.Error.WriteLine(exception.Message);
+    Environment.ExitCode = 2;
+    return;
+}
+
+var rcTestMode = options.RcTestMode;
 var firstRcFrame = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
 // Cada fonte tem seus próprios arquivos. Uma nova fonte pode ser adicionada aqui.
-TelemetrySource[] sources =
+TelemetrySource[] availableSources =
 [
     new(
         Name: "controller_2345",
@@ -39,6 +51,13 @@ TelemetrySource[] sources =
         RcChannelsCsvPath: null,
         IsAircraft: true)
 ];
+
+var sources = availableSources.Where(source => options.Source switch
+{
+    SourceSelection.Controller => !source.IsAircraft,
+    SourceSelection.Aircraft => source.IsAircraft,
+    _ => true
+}).ToArray();
 
 try
 {

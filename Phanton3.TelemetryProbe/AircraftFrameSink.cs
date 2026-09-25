@@ -6,7 +6,7 @@ namespace Phanton3.TelemetryProbe;
 internal sealed class AircraftFrameSink : IFrameSink
 {
     private const string FramesHeader = "timestamp,source,length,sender,receiver,sequence,flags,cmdSet,cmdId,payloadLength,payloadHex,crc8Ok,crc16Ok";
-    private const string SummaryHeader = "sender,receiver,cmdSet,cmdId,count,payloadLength,frequencyHz,firstTimestamp,lastTimestamp";
+    private const string SummaryHeader = "src,dst,cmdSet,cmdId,payloadLen,count,firstTimestamp,lastTimestamp,frequencyHz";
     private static readonly TimeSpan SummaryInterval = TimeSpan.FromSeconds(2);
     private static readonly UTF8Encoding Utf8 = new(false);
 
@@ -14,7 +14,7 @@ internal sealed class AircraftFrameSink : IFrameSink
     private readonly FileStream _frames;
     private readonly StreamWriter _csv;
     private readonly bool _showFrames;
-    private readonly Dictionary<(byte Sender, byte Receiver, byte CommandSet, byte CommandId), CommandStats> _stats;
+    private readonly Dictionary<(byte Sender, byte Receiver, byte CommandSet, byte CommandId, int PayloadLength), CommandStats> _stats;
     private DateTimeOffset _lastSummaryWrite = DateTimeOffset.MinValue;
     private bool _summaryDirty = true;
 
@@ -70,13 +70,13 @@ internal sealed class AircraftFrameSink : IFrameSink
                 frame.Crc8Ok ? "true" : "false",
                 frame.Crc16Ok ? "true" : "false"));
 
-            var key = (frame.Sender, frame.Receiver, frame.CommandSet, frame.CommandId);
+            var key = (frame.Sender, frame.Receiver, frame.CommandSet, frame.CommandId, frame.PayloadLength);
             if (!_stats.TryGetValue(key, out var stats))
             {
                 stats = new CommandStats();
                 _stats.Add(key, stats);
             }
-            stats.Add(timestamp, frame.PayloadLength);
+            stats.Add(timestamp);
             _summaryDirty = true;
 
             if (_showFrames)
@@ -108,7 +108,8 @@ internal sealed class AircraftFrameSink : IFrameSink
         foreach (var entry in _stats.OrderBy(item => item.Key.Sender)
                      .ThenBy(item => item.Key.Receiver)
                      .ThenBy(item => item.Key.CommandSet)
-                     .ThenBy(item => item.Key.CommandId))
+                     .ThenBy(item => item.Key.CommandId)
+                     .ThenBy(item => item.Key.PayloadLength))
         {
             var stats = entry.Value;
             var seconds = (stats.LastTimestamp - stats.FirstTimestamp).TotalSeconds;
@@ -120,11 +121,11 @@ internal sealed class AircraftFrameSink : IFrameSink
                 .Append(Hex(entry.Key.Receiver)).Append(',')
                 .Append(Hex(entry.Key.CommandSet)).Append(',')
                 .Append(Hex(entry.Key.CommandId)).Append(',')
+                .Append(entry.Key.PayloadLength.ToString(CultureInfo.InvariantCulture)).Append(',')
                 .Append(stats.Count.ToString(CultureInfo.InvariantCulture)).Append(',')
-                .Append(string.Join('|', stats.PayloadLengths.Order())).Append(',')
-                .Append(frequency.ToString("0.###", CultureInfo.InvariantCulture)).Append(',')
                 .Append(stats.FirstTimestamp.ToString("O", CultureInfo.InvariantCulture)).Append(',')
-                .Append(stats.LastTimestamp.ToString("O", CultureInfo.InvariantCulture)).AppendLine();
+                .Append(stats.LastTimestamp.ToString("O", CultureInfo.InvariantCulture)).Append(',')
+                .Append(frequency.ToString("0.###", CultureInfo.InvariantCulture)).AppendLine();
         }
 
         var temporaryPath = _source.CommandsSummaryPath + ".tmp";
@@ -161,14 +162,11 @@ internal sealed class AircraftFrameSink : IFrameSink
         public long Count { get; private set; }
         public DateTimeOffset FirstTimestamp { get; private set; }
         public DateTimeOffset LastTimestamp { get; private set; }
-        public HashSet<int> PayloadLengths { get; } = [];
-
-        public void Add(DateTimeOffset timestamp, int payloadLength)
+        public void Add(DateTimeOffset timestamp)
         {
             if (Count == 0 || timestamp < FirstTimestamp) FirstTimestamp = timestamp;
             if (Count == 0 || timestamp > LastTimestamp) LastTimestamp = timestamp;
             Count++;
-            PayloadLengths.Add(payloadLength);
         }
     }
 }

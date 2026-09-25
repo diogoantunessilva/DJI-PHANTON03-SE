@@ -87,6 +87,39 @@ try
     }
     Check(File.ReadAllLines(source.CommandsSummaryPath).Single(line => line.StartsWith("0x0E,0x02,0x06,0x05,")).EndsWith(",3"), "resumo acumulado após reinício");
     Check(File.ReadAllLines(source.RcChannelsCsvPath).Length == 3, "CSV RC acumulado após reinício");
+
+    var aircraftSource = new TelemetrySource("aircraft_5678", "192.168.1.2", 5678, "Wi-Fi",
+        Path.Combine(testDirectory, "aircraft_raw.bin"), Path.Combine(testDirectory, "aircraft_telemetry.log"),
+        Path.Combine(testDirectory, "aircraft_duml_frames.bin"), Path.Combine(testDirectory, "aircraft_frames.csv"),
+        Path.Combine(testDirectory, "aircraft_commands_summary.csv"), null, IsAircraft: true);
+    var firstTimestamp = new DateTimeOffset(2026, 9, 24, 23, 0, 0, TimeSpan.FromHours(-3));
+    var shorterBytes = sample.AsSpan(0, 23).ToArray().Concat(new byte[2]).ToArray();
+    shorterBytes[1] = (byte)shorterBytes.Length;
+    shorterBytes[3] = DjiCrc.Crc8(shorterBytes.AsSpan(0, 3));
+    var shorterCrc = DjiCrc.Crc16(shorterBytes.AsSpan(0, shorterBytes.Length - 2));
+    shorterBytes[^2] = (byte)shorterCrc;
+    shorterBytes[^1] = (byte)(shorterCrc >> 8);
+
+    await using (var aircraftSink = await AircraftFrameSink.OpenAsync(aircraftSource, showFrames: false))
+    {
+        Check(!await aircraftSink.WriteFrameAsync(frame, firstTimestamp), "aeronave sem decodificação de canais RC");
+        await aircraftSink.WriteFrameAsync(corrupt[1], firstTimestamp.AddSeconds(2));
+        await aircraftSink.WriteFrameAsync(DumlFrame.Parse(shorterBytes), firstTimestamp.AddSeconds(4));
+    }
+
+    var aircraftRows = File.ReadAllLines(aircraftSource.FramesCsvPath);
+    Check(aircraftRows.Length == 4 && aircraftRows[0] == "timestamp,source,length,sender,receiver,sequence,flags,cmdSet,cmdId,payloadLength,payloadHex,crc8Ok,crc16Ok", "cabeçalho CSV da aeronave");
+    Check(aircraftRows[1].Split(',')[1] == "aircraft_5678" && aircraftRows[1].EndsWith(",true,true")
+        && aircraftRows[2].EndsWith(",true,false"), "origem e CRCs da aeronave");
+    Check(new FileInfo(aircraftSource.FramesCapturePath).Length == 2 * sample.Length + shorterBytes.Length, "quadros brutos da aeronave");
+    var aircraftSummary = File.ReadAllLines(aircraftSource.CommandsSummaryPath);
+    Check(aircraftSummary.Length == 2 && aircraftSummary[1] == $"0x0E,0x02,0x06,0x05,3,12|13,0.5,{firstTimestamp:O},{firstTimestamp.AddSeconds(4):O}", "resumo da aeronave com frequência e comprimentos");
+
+    await using (var aircraftSink = await AircraftFrameSink.OpenAsync(aircraftSource, showFrames: false))
+    {
+        await aircraftSink.WriteFrameAsync(frame, firstTimestamp.AddSeconds(6));
+    }
+    Check(File.ReadAllLines(aircraftSource.CommandsSummaryPath)[1] == $"0x0E,0x02,0x06,0x05,4,12|13,0.5,{firstTimestamp:O},{firstTimestamp.AddSeconds(6):O}", "resumo da aeronave acumulado após reinício");
 }
 finally
 {

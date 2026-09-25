@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Phanton3.TelemetryProbe\DjiCrc.cs" Link="DjiCrc.cs" />
+    <Compile Include="..\Phanton3.TelemetryProbe\DumlFrame.cs" Link="DumlFrame.cs" />
+    <Compile Include="..\Phanton3.TelemetryProbe\DumlStreamParser.cs" Link="DumlStreamParser.cs" />
+    <Compile Include="..\Phanton3.TelemetryProbe\DumlFrameSink.cs" Link="DumlFrameSink.cs" />
+    <Compile Include="..\Phanton3.TelemetryProbe\DumlSemanticDecoder.cs" Link="DumlSemanticDecoder.cs" />
+    <Compile Include="..\Phanton3.TelemetryProbe\TelemetrySource.cs" Link="TelemetrySource.cs" />
+  </ItemGroup>
+
+</Project>

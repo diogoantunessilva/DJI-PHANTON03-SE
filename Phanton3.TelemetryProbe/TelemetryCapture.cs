@@ -5,7 +5,7 @@ using System.Text;
 
 namespace Phanton3.TelemetryProbe;
 
-internal sealed class TelemetryCapture(TelemetrySource source)
+internal sealed class TelemetryCapture(TelemetrySource source, Action? onRcFrame = null, bool showFrames = true)
 {
     private static readonly TimeSpan ConnectionTimeout = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan ReconnectDelay = TimeSpan.FromSeconds(3);
@@ -26,6 +26,9 @@ internal sealed class TelemetryCapture(TelemetrySource source)
         {
             AutoFlush = true
         };
+        await using IFrameSink frames = source.IsAircraft
+            ? await AircraftFrameSink.OpenAsync(source, showFrames)
+            : await DumlFrameSink.OpenAsync(source, showFrames);
 
         await LogAsync(log, "Iniciando captura somente de leitura. Pressione Ctrl+C para encerrar.");
 
@@ -33,6 +36,7 @@ internal sealed class TelemetryCapture(TelemetrySource source)
 
         while (!shutdownToken.IsCancellationRequested)
         {
+            var parser = new DumlStreamParser();
             try
             {
                 var localAddress = ResolveLocalAddress();
@@ -56,8 +60,8 @@ internal sealed class TelemetryCapture(TelemetrySource source)
 
                     try
                     {
-                        await capture.WriteAsync(buffer.AsMemory(0, count), shutdownToken);
-                        await capture.FlushAsync(shutdownToken);
+                        await capture.WriteAsync(buffer.AsMemory(0, count));
+                        await capture.FlushAsync();
                     }
                     catch (IOException exception)
                     {
@@ -65,7 +69,21 @@ internal sealed class TelemetryCapture(TelemetrySource source)
                     }
 
                     var preview = Convert.ToHexString(buffer.AsSpan(0, Math.Min(count, HexPreviewLength)));
-                    await LogAsync(log, $"{count} bytes recebidos | hex[0..{Math.Min(count, HexPreviewLength)}]: {preview}");
+                    await LogAsync(log, $"{count} bytes recebidos | hex[0..{Math.Min(count, HexPreviewLength)}]: {preview}", showConsole: false);
+
+                    var batch = parser.Feed(buffer.AsSpan(0, count));
+                    if (batch.DiscardedBytes > 0)
+                    {
+                        await LogAsync(log, $"DUML: {batch.DiscardedBytes} byte(s) fora de quadro; {batch.InvalidLengths} cabeçalho(s) com tamanho inválido.");
+                    }
+
+                    foreach (var frame in batch.Frames)
+                    {
+                        if (await frames.WriteFrameAsync(frame, DateTimeOffset.Now))
+                        {
+                            onRcFrame?.Invoke();
+                        }
+                    }
                 }
             }
             catch (OperationCanceledException) when (shutdownToken.IsCancellationRequested)
@@ -79,6 +97,15 @@ internal sealed class TelemetryCapture(TelemetrySource source)
             catch (Exception exception) when (exception is SocketException or IOException)
             {
                 await LogAsync(log, $"Conexão perdida: {exception.Message}");
+            }
+            finally
+            {
+                if (parser.PendingByteCount > 0)
+                {
+                    await LogAsync(log, $"DUML: {parser.PendingByteCount} byte(s) parciais descartados ao encerrar a conexão.");
+                }
+
+                await frames.FlushSummaryAsync();
             }
 
             try
@@ -136,10 +163,13 @@ internal sealed class TelemetryCapture(TelemetrySource source)
         return true;
     }
 
-    private async Task LogAsync(StreamWriter log, string message)
+    private async Task LogAsync(StreamWriter log, string message, bool showConsole = true)
     {
         var line = $"{DateTimeOffset.Now:O} [{source.Name}] {message}";
-        Console.WriteLine(line);
+        if (showConsole)
+        {
+            Console.WriteLine(line);
+        }
 
         try
         {

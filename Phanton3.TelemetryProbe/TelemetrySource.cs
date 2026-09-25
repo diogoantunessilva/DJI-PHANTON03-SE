@@ -6,4 +6,9 @@ internal sealed record TelemetrySource(
     int Port,
     string InterfaceName,
     string CapturePath,
-    string LogPath);
+    string LogPath,
+    string FramesCapturePath,
+    string FramesCsvPath,
+    string CommandsSummaryPath,
+    string? RcChannelsCsvPath,
+    bool IsAircraft = false);

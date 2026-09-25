@@ -4,4 +4,7 @@
 **/logs/
 **/.network-metrics-backup.json
 **/publish/
+**/publish-duml/
+**/publish-semantics/
+**/publish-rc-test/
 **/build-output/

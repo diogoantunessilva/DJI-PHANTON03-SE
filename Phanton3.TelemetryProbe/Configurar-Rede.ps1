@@ -31,9 +31,9 @@ if ($Acao -eq 'Aplicar') {
             Set-Content -LiteralPath $backupPath -Encoding UTF8
     }
 
-    Set-NetIPInterface -InterfaceAlias 'Wi-Fi' -AddressFamily IPv4 -InterfaceMetric 10
-    Set-NetIPInterface -InterfaceAlias 'Ethernet' -AddressFamily IPv4 -InterfaceMetric 100
-    Write-Host 'Wi-Fi priorizado para a internet; Ethernet disponível para a telemetria.'
+    Set-NetIPInterface -InterfaceAlias 'Ethernet' -AddressFamily IPv4 -InterfaceMetric 10
+    Set-NetIPInterface -InterfaceAlias 'Wi-Fi' -AddressFamily IPv4 -InterfaceMetric 100
+    Write-Host 'Ethernet priorizada para a internet; Wi-Fi disponível para a telemetria DJI.'
 }
 else {
     if (-not (Test-Path -LiteralPath $backupPath)) {

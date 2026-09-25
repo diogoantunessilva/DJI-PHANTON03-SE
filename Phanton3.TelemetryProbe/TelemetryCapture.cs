@@ -1,3 +1,5 @@
+using System.Net;
+using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Text;
 
@@ -16,10 +18,10 @@ internal sealed class TelemetryCapture(TelemetrySource source)
 
         await using var capture = new FileStream(
             source.CapturePath, FileMode.Append, FileAccess.Write, FileShare.Read,
-            bufferSize: 64 * 1024, FileOptions.Asynchronous);
+            bufferSize: 64 * 1024, options: FileOptions.Asynchronous);
         await using var logFile = new FileStream(
             source.LogPath, FileMode.Append, FileAccess.Write, FileShare.Read,
-            bufferSize: 4096, FileOptions.Asynchronous);
+            bufferSize: 4096, options: FileOptions.Asynchronous);
         await using var log = new StreamWriter(logFile, new UTF8Encoding(false))
         {
             AutoFlush = true
@@ -33,11 +35,12 @@ internal sealed class TelemetryCapture(TelemetrySource source)
         {
             try
             {
-                using var client = new TcpClient();
+                var localAddress = ResolveLocalAddress();
+                using var client = new TcpClient(new IPEndPoint(localAddress, 0));
                 using var connectionTimeout = CancellationTokenSource.CreateLinkedTokenSource(shutdownToken);
                 connectionTimeout.CancelAfter(ConnectionTimeout);
 
-                await LogAsync(log, $"Conectando a {source.Host}:{source.Port}.");
+                await LogAsync(log, $"Conectando a {source.Host}:{source.Port} pela interface {source.InterfaceName} ({localAddress}).");
                 await client.ConnectAsync(source.Host, source.Port, connectionTimeout.Token);
                 await LogAsync(log, "Conectado.");
 
@@ -89,6 +92,48 @@ internal sealed class TelemetryCapture(TelemetrySource source)
         }
 
         await LogAsync(log, "Captura encerrada.");
+    }
+
+    private IPAddress ResolveLocalAddress()
+    {
+        var adapter = NetworkInterface.GetAllNetworkInterfaces()
+            .FirstOrDefault(item => string.Equals(item.Name, source.InterfaceName, StringComparison.OrdinalIgnoreCase));
+
+        if (adapter is null || adapter.OperationalStatus != OperationalStatus.Up)
+        {
+            throw new IOException($"A interface {source.InterfaceName} não está conectada.");
+        }
+
+        var destination = IPAddress.Parse(source.Host);
+        var address = adapter.GetIPProperties().UnicastAddresses
+            .FirstOrDefault(item => item.Address.AddressFamily == AddressFamily.InterNetwork
+                && item.IPv4Mask is not null
+                && IsOnSameSubnet(item.Address, destination, item.IPv4Mask));
+
+        return address?.Address
+            ?? throw new IOException($"A interface {source.InterfaceName} não tem um IPv4 na rede de {source.Host}.");
+    }
+
+    private static bool IsOnSameSubnet(IPAddress local, IPAddress destination, IPAddress mask)
+    {
+        var localBytes = local.GetAddressBytes();
+        var destinationBytes = destination.GetAddressBytes();
+        var maskBytes = mask.GetAddressBytes();
+
+        if (localBytes.Length != destinationBytes.Length || localBytes.Length != maskBytes.Length)
+        {
+            return false;
+        }
+
+        for (var index = 0; index < localBytes.Length; index++)
+        {
+            if ((localBytes[index] & maskBytes[index]) != (destinationBytes[index] & maskBytes[index]))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private async Task LogAsync(StreamWriter log, string message)

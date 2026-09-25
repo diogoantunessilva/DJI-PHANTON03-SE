@@ -2,3 +2,6 @@
 **/obj/
 **/captures/
 **/logs/
+**/.network-metrics-backup.json
+**/publish/
+**/build-output/

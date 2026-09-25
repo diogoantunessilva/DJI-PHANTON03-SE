@@ -17,17 +17,30 @@ TelemetrySource[] sources =
         Name: "controller_2345",
         Host: "192.168.1.1",
         Port: 2345,
+        InterfaceName: "Ethernet",
         CapturePath: Path.Combine(workingDirectory, "captures", "controller_2345.bin"),
         LogPath: Path.Combine(workingDirectory, "logs", "telemetry.log"))
 ];
 
 try
 {
-    await Task.WhenAll(sources.Select(source =>
-        new TelemetryCapture(source).RunAsync(shutdown.Token)));
+    await Task.WhenAll(sources.Select(RunSourceAsync));
 }
 catch (Exception exception)
 {
     Console.Error.WriteLine($"Erro fatal: {exception}");
     Environment.ExitCode = 1;
+}
+
+async Task RunSourceAsync(TelemetrySource source)
+{
+    try
+    {
+        await new TelemetryCapture(source).RunAsync(shutdown.Token);
+    }
+    catch
+    {
+        shutdown.Cancel();
+        throw;
+    }
 }
